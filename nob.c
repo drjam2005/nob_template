@@ -3,12 +3,13 @@
 #include "nob.h"
 
 #define COMPILER "g++"
+#define EXECUTABLE "myExec"
 #define BUILD_FOLDER "build/"
 #define BUILD_LIBS_FOLDER "build/libs/"
 #if defined(_WIN32)
-#define OUTPUT_EXEC "build/myExec.exe"
+#define OUTPUT_EXEC BUILD_FOLDER EXECUTABLE".exe"
 #elif defined(__linux__)
-#define OUTPUT_EXEC "build/myExec"
+#define OUTPUT_EXEC BUILD_FOLDER EXECUTABLE
 #endif
 
 Procs procs = {0};
