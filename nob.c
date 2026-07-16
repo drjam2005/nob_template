@@ -70,7 +70,7 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
 		obj.sourcePath = sourcePath;
 		obj.cmd = cmd;
 
-		da_append(&objects, obj);
+		nob_da_append(&objects, obj);
 	}
 
 	return objects;
@@ -79,7 +79,7 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
 buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	buildObjects objects = {0};
 
-	da_foreach(buildScript, script, &scripts) {
+	nob_da_foreach(buildScript, script, &scripts) {
 		int rebuild_is_needed = nob_needs_rebuild(script->buildPath, &script->sourcePath, 1);
 		if (rebuild_is_needed) {
 			nob_log(NOB_INFO, "Building Object: %s", script->buildPath);
@@ -100,7 +100,7 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 
 		buildObject obj = {0};
 		obj.buildPath = script->buildPath;
-		da_append(&objects, obj);
+		nob_da_append(&objects, obj);
 	}
 
 	return objects;
@@ -117,7 +117,7 @@ bool compileObjects(buildObjects objects, linkerFlags links, const char* outputE
 	nob_cmd_append(&cmd, COMPILER);
 	nob_cc_output(&cmd, outputExec);
 
-	da_foreach(buildObject, obj, &objects) {
+	nob_da_foreach(buildObject, obj, &objects) {
 		nob_cc_inputs(&cmd, obj->buildPath);
 	}
 
