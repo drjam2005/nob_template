@@ -29,7 +29,10 @@ typedef struct {
 } buildScript;
 
 typedef struct {
-	buildScript* items;
+	union {
+		buildScript* items;
+		buildScript* scripts;
+	};
 	size_t count;
 	size_t capacity;
 } buildScripts;
@@ -39,10 +42,18 @@ typedef struct {
 } buildObject;
 
 typedef struct {
-	buildObject* items;
+	union {
+		buildObject* items;
+		buildObject* objects;
+	};
 	size_t count;
 	size_t capacity;
 } buildObjects;
+
+typedef struct {
+	const char** flags;
+	size_t count;
+} compilerFlags;
 
 typedef enum {
     LIB_STATIC,
@@ -111,7 +122,7 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	return objects;
 }
 
-bool compileObjects(buildObjects objects, linkerFlags links, const char* outputExec) {
+bool compileObjects(buildObjects objects, linkerFlags links, compilerFlags flags, const char* outputExec) {
 	Nob_Cmd cmd = {0};
 
 	if(!objects.count){
@@ -128,6 +139,10 @@ bool compileObjects(buildObjects objects, linkerFlags links, const char* outputE
 
 	for(size_t i = 0; i < links.count; ++i) {
 		nob_cmd_append(&cmd, links.links[i]);
+	}
+
+	for(size_t i = 0; i < flags.count; ++i) {
+		nob_cmd_append(&cmd, flags.flags[i]);
 	}
 
 	return nob_cmd_run(&cmd);
@@ -294,15 +309,28 @@ int main(int argc, char** argv){
 		.count = ARRAY_LEN(toLink)
 	};
 
-	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), paths, ARRAY_LEN(paths), true);
-	generate_compile_commands(scripts);
+	const char* flags[] = {
+		"-O3",
+	};
+
+	compilerFlags cFlags = {
+		.flags = flags,
+		.count = ARRAY_LEN(flags)
+	};
+
+	buildScripts scripts = generateBuildScripts(
+			sourcesToBuild, ARRAY_LEN(sourcesToBuild),
+			paths,          ARRAY_LEN(paths),
+		true);
+
+	if(!generate_compile_commands(scripts)) return 1;
 
 	buildObjects objects = executeBuildScripts(scripts, asnyc);
 
 	if(asnyc)
 		nob_procs_wait(procs);
 
-	bool success = compileObjects(objects, links, OUTPUT_EXEC);
+	bool success = compileObjects(objects, links, cFlags, OUTPUT_EXEC);
 	if(success)
 		nob_log(NOB_INFO, "Compilation Succesful!");
 	else
