@@ -4,6 +4,7 @@
 
 #define COMPILER "g++"
 #define BUILD_FOLDER "build/"
+#define BUILD_LIBS_FOLDER "build/libs/"
 #if defined(_WIN32)
 #define OUTPUT_EXEC "build/myExec.exe"
 #elif defined(__linux__)
@@ -20,11 +21,6 @@ typedef struct {
 	const char** links;
 	size_t count;
 } linkerFlags;
-
-typedef struct {
-	const char** paths;
-	size_t count;
-} includePaths;
 
 typedef struct {
 	const char* sourcePath;
@@ -53,7 +49,7 @@ typedef enum {
     LIB_SHARED
 } LibType;
 
-buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, includePaths includes, bool pic) {
+buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, const char* includes[], size_t includesCount, bool pic) {
     buildScripts objects = {0};
 
     for (size_t i = 0; i < sourcesCount; ++i) {
@@ -70,8 +66,8 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
         if (pic) nob_cmd_append(&cmd, "-fPIC");
 #endif
 
-        for (size_t j = 0; j < includes.count; ++j) {
-            nob_cmd_append(&cmd, includes.paths[j]);
+        for (size_t j = 0; j < includesCount; ++j) {
+            nob_cmd_append(&cmd, includes[j]);
         }
 
         buildScript obj = {0};
@@ -84,6 +80,7 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
 
     return objects;
 }
+
 buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	buildObjects objects = {0};
 
@@ -219,9 +216,9 @@ bool createLibrary(buildObjects objects, const char* libName, LibType type) {
 
     const char* outputPath = nob_temp_sprintf(
 #if defined(_WIN32)
-        BUILD_FOLDER"%s%s", libName, type == LIB_STATIC ? ".lib" : ".dll"
+        BUILD_LIBS_FOLDER"%s%s", libName, type == LIB_STATIC ? ".lib" : ".dll"
 #else
-        BUILD_FOLDER"lib%s%s", libName, type == LIB_STATIC ? ".a" : ".so"
+        BUILD_LIBS_FOLDER"lib%s%s", libName, type == LIB_STATIC ? ".a" : ".so"
 #endif
     );
 
@@ -246,6 +243,7 @@ bool createLibrary(buildObjects objects, const char* libName, LibType type) {
     if (ok) nob_log(NOB_INFO, "Created library: %s", outputPath);
     return ok;
 }
+
 
 int main(int argc, char** argv){
 	NOB_GO_REBUILD_URSELF(argc, argv);
@@ -279,11 +277,6 @@ int main(int argc, char** argv){
 #endif
 	};
 
-	includePaths includes = {
-		.paths = paths,
-		.count = ARRAY_LEN(paths)
-	};
-
 	const char* toLink[] =
 	{
 		// "-Llinkdir", "-llibrary",
@@ -301,7 +294,7 @@ int main(int argc, char** argv){
 		.count = ARRAY_LEN(toLink)
 	};
 
-	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), includes, true);
+	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), paths, ARRAY_LEN(paths), true);
 	generate_compile_commands(scripts);
 
 	buildObjects objects = executeBuildScripts(scripts, asnyc);
