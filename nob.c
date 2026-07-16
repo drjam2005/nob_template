@@ -128,6 +128,7 @@ bool compileObjects(buildObjects objects, linkerFlags links, const char* outputE
 	return nob_cmd_run(&cmd);
 }
 
+// Generated from Claude
 void json_escape_fputs(const char *s, FILE *f)
 {
     for (; *s; ++s) {
@@ -141,6 +142,7 @@ void json_escape_fputs(const char *s, FILE *f)
     }
 }
 
+// Generated from Claude
 void json_escape_path_fputs(const char *s, FILE *f)
 {
     for (; *s; ++s) {
@@ -150,6 +152,7 @@ void json_escape_path_fputs(const char *s, FILE *f)
     }
 }
 
+// Generated from Claude
 bool generate_compile_commands(buildScripts scripts)
 {
     FILE *f = fopen("compile_commands.json", "w");
