@@ -27,6 +27,7 @@ typedef struct {
 } includePaths;
 
 typedef struct {
+	const char* sourcePath;
 	const char* buildPath;
 	Nob_Cmd cmd;
 } buildScript;
@@ -66,6 +67,7 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
 
 		buildScript obj = {0};
 		obj.buildPath = buildPath;
+		obj.sourcePath = sourcePath;
 		obj.cmd = cmd;
 
 		da_append(&objects, obj);
@@ -125,6 +127,43 @@ bool compileObjects(buildObjects objects, linkerFlags links, const char* outputE
 	return nob_cmd_run(&cmd);
 }
 
+bool generate_compile_commands(buildScripts scripts)
+{
+    FILE *f = fopen("compile_commands.json", "w");
+    if (!f) return false;
+
+    fprintf(f, "[\n");
+
+    for (size_t i = 0; i < scripts.count; ++i) {
+        buildScript *script = &scripts.items[i];
+
+        fprintf(f,
+            "  {\n"
+            "    \"directory\": \"%s\",\n"
+            "    \"file\": \"%s\",\n"
+            "    \"arguments\": [",
+            nob_get_current_dir_temp(),
+            script->sourcePath
+		);
+
+        for (size_t j = 0; j < script->cmd.count; ++j) {
+            fprintf(f, "%s\"%s\"",
+                j ? ", " : "",
+                script->cmd.items[j]);
+        }
+
+        fprintf(f,
+            "]\n"
+            "  }%s\n",
+            i + 1 < scripts.count ? "," : "");
+    }
+
+    fprintf(f, "]\n");
+    fclose(f);
+
+    return true;
+}
+
 
 int main(int argc, char** argv){
 	NOB_GO_REBUILD_URSELF(argc, argv);
@@ -181,6 +220,8 @@ int main(int argc, char** argv){
 	};
 
 	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), includes);
+	generate_compile_commands(scripts);
+
 	buildObjects objects = executeBuildScripts(scripts, asnyc);
 
 	if(asnyc)
