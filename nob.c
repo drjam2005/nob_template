@@ -48,34 +48,42 @@ typedef struct {
 	size_t capacity;
 } buildObjects;
 
-buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, includePaths includes) {
-	buildScripts objects = {0};
+typedef enum {
+    LIB_STATIC,
+    LIB_SHARED
+} LibType;
 
-	for(size_t i = 0; i < sourcesCount; ++i) {
-		Nob_Cmd cmd = {0};
-		nob_cmd_append(&cmd, COMPILER);
-		
-		const char* sourcePath = sources[i];
-		const char* buildPath = nob_temp_sprintf(BUILD_FOLDER"%s.o", nob_path_name(sources[i]));
-		nob_cc_inputs(&cmd, sourcePath);
-		nob_cmd_append(&cmd, "-c");
-		nob_cc_output(&cmd, buildPath);
+buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, includePaths includes, bool pic) {
+    buildScripts objects = {0};
 
-		for(size_t j = 0; j < includes.count; ++j) {
-			nob_cmd_append(&cmd, includes.paths[j]);
-		}
+    for (size_t i = 0; i < sourcesCount; ++i) {
+        Nob_Cmd cmd = {0};
+        nob_cmd_append(&cmd, COMPILER);
 
-		buildScript obj = {0};
-		obj.buildPath = buildPath;
-		obj.sourcePath = sourcePath;
-		obj.cmd = cmd;
+        const char* sourcePath = sources[i];
+        const char* buildPath = nob_temp_sprintf(BUILD_FOLDER"%s.o", nob_path_name(sources[i]));
+        nob_cc_inputs(&cmd, sourcePath);
+        nob_cmd_append(&cmd, "-c");
+        nob_cc_output(&cmd, buildPath);
 
-		nob_da_append(&objects, obj);
-	}
+#if !defined(_WIN32)
+        if (pic) nob_cmd_append(&cmd, "-fPIC");
+#endif
 
-	return objects;
+        for (size_t j = 0; j < includes.count; ++j) {
+            nob_cmd_append(&cmd, includes.paths[j]);
+        }
+
+        buildScript obj = {0};
+        obj.buildPath = buildPath;
+        obj.sourcePath = sourcePath;
+        obj.cmd = cmd;
+
+        nob_da_append(&objects, obj);
+    }
+
+    return objects;
 }
-
 buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	buildObjects objects = {0};
 
@@ -186,6 +194,59 @@ bool generate_compile_commands(buildScripts scripts)
     return true;
 }
 
+
+// Generated from Claude
+static const char* libFileName(const char* libName, LibType type, char* buf, size_t bufSize) {
+#if defined(_WIN32)
+    const char* prefix = "";
+    const char* ext = (type == LIB_STATIC) ? ".lib" : ".dll";
+#else
+    const char* prefix = "lib";
+    const char* ext = (type == LIB_STATIC) ? ".a" : ".so";
+#endif
+    snprintf(buf, bufSize, "%s%s%s%s", BUILD_FOLDER, prefix, libName, ext);
+    return buf;
+}
+
+// Generated from Claude
+bool createLibrary(buildObjects objects, const char* libName, LibType type) {
+    Nob_Cmd cmd = {0};
+
+    if (!objects.count) {
+        nob_log(NOB_WARNING, "No input files for library creation!");
+        return false;
+    }
+
+    const char* outputPath = nob_temp_sprintf(
+#if defined(_WIN32)
+        BUILD_FOLDER"%s%s", libName, type == LIB_STATIC ? ".lib" : ".dll"
+#else
+        BUILD_FOLDER"lib%s%s", libName, type == LIB_STATIC ? ".a" : ".so"
+#endif
+    );
+
+    if (type == LIB_STATIC) {
+#if defined(_WIN32)
+        nob_cmd_append(&cmd, "llvm-ar", "rcs", outputPath);
+#else
+        nob_cmd_append(&cmd, "ar", "rcs", outputPath);
+#endif
+        nob_da_foreach(buildObject, obj, &objects) {
+            nob_cmd_append(&cmd, obj->buildPath);
+        }
+    } else {
+        nob_cmd_append(&cmd, COMPILER, "-shared");
+        nob_cc_output(&cmd, outputPath);
+        nob_da_foreach(buildObject, obj, &objects) {
+            nob_cmd_append(&cmd, obj->buildPath);
+        }
+    }
+
+    bool ok = nob_cmd_run(&cmd);
+    if (ok) nob_log(NOB_INFO, "Created library: %s", outputPath);
+    return ok;
+}
+
 int main(int argc, char** argv){
 	NOB_GO_REBUILD_URSELF(argc, argv);
 	if(!nob_mkdir_if_not_exists(BUILD_FOLDER)) return 1;
@@ -240,7 +301,7 @@ int main(int argc, char** argv){
 		.count = ARRAY_LEN(toLink)
 	};
 
-	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), includes);
+	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), includes, true);
 	generate_compile_commands(scripts);
 
 	buildObjects objects = executeBuildScripts(scripts, asnyc);
