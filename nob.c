@@ -127,43 +127,60 @@ bool compileObjects(buildObjects objects, linkerFlags links, const char* outputE
 	return nob_cmd_run(&cmd);
 }
 
+void json_escape_fputs(const char *s, FILE *f)
+{
+    for (; *s; ++s) {
+        switch (*s) {
+            case '"':  fputs("\\\"", f); break;
+            case '\\': fputs("\\\\", f); break;
+            case '\n': fputs("\\n", f);  break;
+            case '\t': fputs("\\t", f);  break;
+            default:   fputc(*s, f);
+        }
+    }
+}
+
+void json_escape_path_fputs(const char *s, FILE *f)
+{
+    for (; *s; ++s) {
+        char c = (*s == '\\') ? '/' : *s;
+        if (c == '"') fputs("\\\"", f);
+        else          fputc(c, f);
+    }
+}
+
 bool generate_compile_commands(buildScripts scripts)
 {
     FILE *f = fopen("compile_commands.json", "w");
     if (!f) return false;
+
+    const char *cwd = nob_get_current_dir_temp(); // hoisted, doesn't change per-iteration
 
     fprintf(f, "[\n");
 
     for (size_t i = 0; i < scripts.count; ++i) {
         buildScript *script = &scripts.items[i];
 
-        fprintf(f,
-            "  {\n"
-            "    \"directory\": \"%s\",\n"
-            "    \"file\": \"%s\",\n"
-            "    \"arguments\": [",
-            nob_get_current_dir_temp(),
-            script->sourcePath
-		);
+        fprintf(f, "  {\n    \"directory\": \"");
+        json_escape_fputs(cwd, f);
+        fprintf(f, "\",\n    \"file\": \"");
+        json_escape_fputs(script->sourcePath, f);
+        fprintf(f, "\",\n    \"arguments\": [");
 
         for (size_t j = 0; j < script->cmd.count; ++j) {
-            fprintf(f, "%s\"%s\"",
-                j ? ", " : "",
-                script->cmd.items[j]);
+            if (j) fprintf(f, ", ");
+            fputc('"', f);
+            json_escape_fputs(script->cmd.items[j], f);
+            fputc('"', f);
         }
 
-        fprintf(f,
-            "]\n"
-            "  }%s\n",
-            i + 1 < scripts.count ? "," : "");
+        fprintf(f, "]\n  }%s\n", i + 1 < scripts.count ? "," : "");
     }
 
     fprintf(f, "]\n");
     fclose(f);
-
     return true;
 }
-
 
 int main(int argc, char** argv){
 	NOB_GO_REBUILD_URSELF(argc, argv);
