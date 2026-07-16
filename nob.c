@@ -76,40 +76,41 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
 	return objects;
 }
 
-
 buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	buildObjects objects = {0};
 
 	da_foreach(buildScript, script, &scripts) {
-		nob_log(NOB_INFO, "Building Object: %s", script->buildPath);
-		if(async){
-			if(!nob_cmd_run(&script->cmd, .async=&procs)) {
-				nob_log(NOB_ERROR, "Failed to build %s", script->buildPath);
-				return objects;
+		int rebuild_is_needed = nob_needs_rebuild(script->buildPath, &script->sourcePath, 1);
+		if (rebuild_is_needed) {
+			nob_log(NOB_INFO, "Building Object: %s", script->buildPath);
+			if(async){
+				if(!nob_cmd_run(&script->cmd, .async=&procs)) {
+					nob_log(NOB_ERROR, "Failed to build %s", script->buildPath);
+					return objects;
+				}
+			}else{
+				if(!nob_cmd_run(&script->cmd)) {
+					nob_log(NOB_ERROR, "Failed to build %s", script->buildPath);
+					return objects;
+				}
 			}
-		}else{
-			if(!nob_cmd_run(&script->cmd)) {
-				nob_log(NOB_ERROR, "Failed to build %s", script->buildPath);
-				return objects;
-			}
+		} else {
+			nob_log(NOB_INFO, "%s is up to date, skipping", script->buildPath);
 		}
 
 		buildObject obj = {0};
 		obj.buildPath = script->buildPath;
-
 		da_append(&objects, obj);
 	}
 
-
 	return objects;
 }
-
 
 bool compileObjects(buildObjects objects, linkerFlags links, const char* outputExec) {
 	Nob_Cmd cmd = {0};
 
 	if(!objects.count){
-		nob_log(WARNING, "No input files for compilation!");
+		nob_log(NOB_WARNING, "No input files for compilation!");
 		return false;
 	}
 	
@@ -244,7 +245,8 @@ int main(int argc, char** argv){
 	if(asnyc)
 		nob_procs_wait(procs);
 
-	if(compileObjects(objects, links, OUTPUT_EXEC))
+	bool success = compileObjects(objects, links, OUTPUT_EXEC);
+	if(success)
 		nob_log(NOB_INFO, "Compilation Succesful!");
 	else
 		nob_log(NOB_ERROR, "Compilation Unsuccesful!");
