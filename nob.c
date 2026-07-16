@@ -77,6 +77,7 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, in
 
 buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	buildObjects objects = {0};
+
 	da_foreach(buildScript, script, &scripts) {
 		nob_log(NOB_INFO, "Building Object: %s", script->buildPath);
 		if(async){
@@ -104,6 +105,12 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 
 bool compileObjects(buildObjects objects, linkerFlags links, const char* outputExec) {
 	Nob_Cmd cmd = {0};
+
+	if(!objects.count){
+		nob_log(WARNING, "No input files for compilation!");
+		return false;
+	}
+	
 	nob_cmd_append(&cmd, COMPILER);
 	nob_cc_output(&cmd, outputExec);
 
@@ -137,6 +144,7 @@ int main(int argc, char** argv){
 	
 	const char* sourcesToBuild[] = {
 	//	"src/main.cpp",
+		"nob.c"
 	};
 
 	const char* paths[] = {
@@ -167,12 +175,10 @@ int main(int argc, char** argv){
 #endif
 	};
 
-
 	linkerFlags links = {
 		.links = toLink,
 		.count = ARRAY_LEN(toLink)
 	};
-
 
 	buildScripts scripts = generateBuildScripts(sourcesToBuild, ARRAY_LEN(sourcesToBuild), includes);
 	buildObjects objects = executeBuildScripts(scripts, asnyc);
