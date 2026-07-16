@@ -12,7 +12,7 @@
 #define OUTPUT_EXEC BUILD_FOLDER EXECUTABLE
 #endif
 
-Procs procs = {0};
+Procs global_procs = {0};
 
 typedef struct {
 	const char* sourcePath;
@@ -101,7 +101,7 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 		if (rebuild_is_needed) {
 			nob_log(NOB_INFO, "Building Object: %s", script->buildPath);
 			if(async){
-				if(!nob_cmd_run(&script->cmd, .async=&procs)) {
+				if(!nob_cmd_run(&script->cmd, .async=&global_procs)) {
 					nob_log(NOB_ERROR, "Failed to build %s", script->buildPath);
 					return objects;
 				}
@@ -209,19 +209,6 @@ bool generate_compile_commands(buildScripts scripts)
 
 
 // Generated from Claude
-static const char* libFileName(const char* libName, LibType type, char* buf, size_t bufSize) {
-#if defined(_WIN32)
-    const char* prefix = "";
-    const char* ext = (type == LIB_STATIC) ? ".lib" : ".dll";
-#else
-    const char* prefix = "lib";
-    const char* ext = (type == LIB_STATIC) ? ".a" : ".so";
-#endif
-    snprintf(buf, bufSize, "%s%s%s%s", BUILD_FOLDER, prefix, libName, ext);
-    return buf;
-}
-
-// Generated from Claude
 bool createLibrary(buildObjects objects, const char* libName, LibType type) {
     Nob_Cmd cmd = {0};
 
@@ -264,12 +251,13 @@ bool createLibrary(buildObjects objects, const char* libName, LibType type) {
 int main(int argc, char** argv){
 	NOB_GO_REBUILD_URSELF(argc, argv);
 	if(!nob_mkdir_if_not_exists(BUILD_FOLDER)) return 1;
+	if(!nob_mkdir_if_not_exists(BUILD_LIBS_FOLDER)) return 1;
 
-	bool asnyc = false;
+	bool async = false;
 
 	for (int i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "-j") == 0) {
-			asnyc = true;
+			async = true;
 		} else {
 			nob_log(NOB_ERROR, "Unknown flag: %s", argv[i]);
 			return 1;
@@ -326,10 +314,10 @@ int main(int argc, char** argv){
 
 	if(!generate_compile_commands(scripts)) return 1;
 
-	buildObjects objects = executeBuildScripts(scripts, asnyc);
+	buildObjects objects = executeBuildScripts(scripts, async);
 
-	if(asnyc)
-		nob_procs_wait(procs);
+	if(async)
+		nob_procs_wait(global_procs);
 
 	bool success = compileObjects(objects, links, cFlags, OUTPUT_EXEC);
 	if(success)
