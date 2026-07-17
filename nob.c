@@ -176,7 +176,7 @@ void json_escape_path_fputs(const char *s, FILE *f)
 // Generated from Claude
 bool generate_compile_commands(buildScripts scripts)
 {
-    FILE *f = fopen("compile_commands.json", "w");
+    FILE *f = fopen(BUILD_FOLDER"compile_commands.json", "w");
     if (!f) return false;
 
     const char *cwd = nob_get_current_dir_temp(); // hoisted, doesn't change per-iteration
