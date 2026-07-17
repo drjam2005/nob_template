@@ -115,34 +115,39 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 
 		Nob_String_View bPath = nob_sb_to_sv(buildPathSB);
 
-		int val = nob_read_entire_file(bPath.data, &sb);
-		nob_sb_append_null(&sb);
+		if(nob_read_entire_file(bPath.data, &sb)) {
+			nob_sb_append_null(&sb);
 
-		Nob_String_View fileSv = nob_sv_from_parts(sb.items, sb.count);
+			Nob_String_View fileSv = nob_sv_from_parts(sb.items, sb.count);
 
-		for(;;){
-			Nob_String_View otherSV = nob_sv_chop_by_delim(&fileSv, '\n');
-			Nob_String_View dependencies = nob_sv_chop_by_delim(&otherSV, ':');
+			for(;;){
+				Nob_String_View otherSV = nob_sv_chop_by_delim(&fileSv, '\n');
+				nob_sv_chop_by_delim(&otherSV, ':');
 
-			while (otherSV.count > 0) {
-				Nob_String_View dep = nob_sv_chop_by_delim(&otherSV, ' ');
+				while (otherSV.count > 0) {
+					Nob_String_View dep = nob_sv_chop_by_delim(&otherSV, ' ');
 
-				while (dep.count > 0 &&
-					   (dep.data[dep.count - 1] == '\r' ||
-						dep.data[dep.count - 1] == '\n' ||
-						dep.data[dep.count - 1] == ' '  ||
-						dep.data[dep.count - 1] == '\t')) { dep.count--; }
+					while (dep.count > 0 &&
+						   (dep.data[dep.count - 1] == '\r' ||
+							dep.data[dep.count - 1] == '\n' ||
+							dep.data[dep.count - 1] == '\\' ||
+							dep.data[dep.count - 1] == ' '  ||
+							dep.data[dep.count - 1] == '\t')) { dep.count--; }
 
-				if (dep.count == 0)
-					continue;
+					if (dep.count == 0)
+						continue;
 
-				const char* dependency = nob_temp_sprintf("%.*s", (int)dep.count, dep.data);
-				nob_da_append(&depends, dependency);
+					const char* dependency = nob_temp_sprintf("%.*s", (int)dep.count, dep.data);
+					nob_da_append(&depends, dependency);
+				}
+
+				if(fileSv.count == 0)
+					break;
 			}
-
-			if(fileSv.count == 0)
-				break;
+		} else {
+			nob_da_append(&depends, script->sourcePath);
 		}
+
 
 		int rebuild_is_needed = nob_needs_rebuild(script->buildPath, depends.items, depends.count);
 
