@@ -1,4 +1,4 @@
-# My own `nob.h` template
+# My own `nob.c` template
 - depends on `https://github.com/tsoding/nob.h/`
 
 ### Features
