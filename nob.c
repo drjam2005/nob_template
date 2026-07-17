@@ -15,8 +15,10 @@
 Procs global_procs = {0};
 
 typedef struct {
-	const char* sourcePath;
-} sourceObject;
+	const char** items;
+	size_t count;
+	size_t capacity;
+} buildDependencies;
 
 typedef struct {
 	const char** links;
@@ -72,6 +74,7 @@ buildScripts generateBuildScripts(const char* sources[], size_t sourcesCount, co
         const char* buildPath = nob_temp_sprintf(BUILD_FOLDER"%s.o", nob_path_name(sources[i]));
         nob_cc_inputs(&cmd, sourcePath);
         nob_cmd_append(&cmd, "-c");
+        nob_cmd_append(&cmd, "-MMD", "-MP");
         nob_cc_output(&cmd, buildPath);
 
 #if !defined(_WIN32)
@@ -97,7 +100,52 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 	buildObjects objects = {0};
 
 	nob_da_foreach(buildScript, script, &scripts) {
-		int rebuild_is_needed = nob_needs_rebuild(script->buildPath, &script->sourcePath, 1);
+		buildDependencies depends = {0};
+		Nob_String_Builder sb = {0};
+		
+		// dependency checking
+		Nob_String_View sv = nob_sv_from_cstr(script->buildPath);
+		Nob_String_View suffix = nob_sv_from_cstr(".o");
+		nob_sv_chop_suffix(&sv, suffix);
+
+		Nob_String_Builder buildPathSB = {0};
+		nob_sb_append_sv(&buildPathSB, sv);
+		nob_sb_append_cstr(&buildPathSB, ".d");
+		nob_sb_append_null(&buildPathSB);
+
+		Nob_String_View bPath = nob_sb_to_sv(buildPathSB);
+
+		int val = nob_read_entire_file(bPath.data, &sb);
+		nob_sb_append_null(&sb);
+
+		Nob_String_View fileSv = nob_sv_from_parts(sb.items, sb.count);
+
+		for(;;){
+			Nob_String_View otherSV = nob_sv_chop_by_delim(&fileSv, '\n');
+			Nob_String_View dependencies = nob_sv_chop_by_delim(&otherSV, ':');
+
+			while (otherSV.count > 0) {
+				Nob_String_View dep = nob_sv_chop_by_delim(&otherSV, ' ');
+
+				while (dep.count > 0 &&
+					   (dep.data[dep.count - 1] == '\r' ||
+						dep.data[dep.count - 1] == '\n' ||
+						dep.data[dep.count - 1] == ' '  ||
+						dep.data[dep.count - 1] == '\t')) { dep.count--; }
+
+				if (dep.count == 0)
+					continue;
+
+				const char* dependency = nob_temp_sprintf("%.*s", (int)dep.count, dep.data);
+				nob_da_append(&depends, dependency);
+			}
+
+			if(fileSv.count == 0)
+				break;
+		}
+
+		int rebuild_is_needed = nob_needs_rebuild(script->buildPath, depends.items, depends.count);
+
 		if (rebuild_is_needed) {
 			nob_log(NOB_INFO, "Building Object: %s", script->buildPath);
 			if(async){
