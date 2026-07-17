@@ -115,38 +115,49 @@ buildObjects executeBuildScripts(buildScripts scripts, bool async) {
 
 		Nob_String_View bPath = nob_sb_to_sv(buildPathSB);
 
-		if(nob_read_entire_file(bPath.data, &sb)) {
+		// Dependency parsing Generated from Claude
+		if (nob_read_entire_file(bPath.data, &sb)) {
 			nob_sb_append_null(&sb);
-
 			Nob_String_View fileSv = nob_sv_from_parts(sb.items, sb.count);
 
-			for(;;){
-				Nob_String_View otherSV = nob_sv_chop_by_delim(&fileSv, '\n');
-				nob_sv_chop_by_delim(&otherSV, ':');
+			// Skip past "target:" for the first rule.
+			nob_sv_chop_by_delim(&fileSv, ':');
 
-				while (otherSV.count > 0) {
-					Nob_String_View dep = nob_sv_chop_by_delim(&otherSV, ' ');
-
-					while (dep.count > 0 &&
-						   (dep.data[dep.count - 1] == '\r' ||
-							dep.data[dep.count - 1] == '\n' ||
-							dep.data[dep.count - 1] == '\\' ||
-							dep.data[dep.count - 1] == ' '  ||
-							dep.data[dep.count - 1] == '\t')) { dep.count--; }
-
-					if (dep.count == 0)
-						continue;
-
-					const char* dependency = nob_temp_sprintf("%.*s", (int)dep.count, dep.data);
-					nob_da_append(&depends, dependency);
+			while (fileSv.count > 0) {
+				// Manually find the next delimiter: space, \n, or \r.
+				// (Handles LF, CRLF, and stray \r safely.)
+				size_t i = 0;
+				while (i < fileSv.count &&
+					   fileSv.data[i] != ' '  &&
+					   fileSv.data[i] != '\n' &&
+					   fileSv.data[i] != '\r') {
+					i++;
 				}
 
-				if(fileSv.count == 0)
+				Nob_String_View depend = nob_sv_from_parts(fileSv.data, i);
+				depend = nob_sv_trim(depend);
+
+				if (i < fileSv.count) i++; // consume the delimiter
+				fileSv.data  += i;
+				fileSv.count -= i;
+
+				if (depend.count == 0) continue;
+				if (nob_sv_eq(depend, nob_sv_from_cstr("\\"))) continue;
+
+				// A token ending in ':' marks a -MP phony rule ("header.h:"),
+				// which means we've reached the end of the real dependency
+				// list. Stop here instead of treating it as a dependency.
+				if (depend.count > 0 && depend.data[depend.count - 1] == ':') {
 					break;
+				}
+
+				const char *depCstr = nob_temp_sv_to_cstr(depend);
+				nob_da_append(&depends, depCstr);
 			}
 		} else {
 			nob_da_append(&depends, script->sourcePath);
 		}
+
 
 
 		int rebuild_is_needed = nob_needs_rebuild(script->buildPath, depends.items, depends.count);
